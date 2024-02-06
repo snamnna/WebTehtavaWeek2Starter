@@ -1,3 +1,4 @@
+import {param} from 'express-validator';
 import {Request, Response, NextFunction} from 'express';
 import userModel from '../models/userModel';
 import CustomError from '../../classes/CustomError';
@@ -18,7 +19,7 @@ const userGet = async (
   next: NextFunction
 ) => {
   try {
-    console.log('Tässä req.params.id userGetissa: ', req.params.id);
+    console.log('TOIMIIKO TÄMÄKÄÄN');
     const user = await userModel
       .findById(req.params.id)
       .select('-password -role');
@@ -26,6 +27,37 @@ const userGet = async (
       throw new CustomError('User not found', 404);
     }
     res.json(user);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// - userGetCurrent - get current user and return user without password and role
+const userGetCurrent = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = res.locals.user._id;
+
+    const user = await userModel
+      .findById(userId)
+      .select('-password -role')
+      .lean();
+
+    if (!user) {
+      throw new CustomError('User not found', 404);
+    }
+
+    res.status(200).json({
+      message: 'Current user retrieved successfully',
+      data: {
+        _id: user._id,
+        user_name: user.user_name,
+        email: user.email,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -154,4 +186,5 @@ export {
   userPutCurrent,
   userDeleteCurrent,
   checkToken,
+  userGetCurrent,
 };
