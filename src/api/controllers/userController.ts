@@ -18,6 +18,7 @@ const userGet = async (
   next: NextFunction
 ) => {
   try {
+    console.log('Tässä req.params.id userGetissa: ', req.params.id);
     const user = await userModel
       .findById(req.params.id)
       .select('-password -role');
@@ -78,24 +79,26 @@ const userPost = async (
 // - userPutCurrent - update current user
 
 const userPutCurrent = async (
-  req: Request<{}, {}, UserInput>,
-  res: Response<MessageResponse>,
+  req: Request<{}, {}, User>,
+  res: Response,
   next: NextFunction
 ) => {
-  const user = req.user as UserOutput;
   try {
     const updatedUser = await userModel
-      .findByIdAndUpdate(user._id, req.body, {new: true})
+      .findByIdAndUpdate(res.locals.user._id, req.body, {
+        //id saadaan localin kautta
+        new: true,
+      })
       .select('-password -role');
     if (!updatedUser) {
       throw new CustomError('User not found', 404);
     }
     res.status(200).json({
-      message: 'User updated',
+      message: 'User added',
       data: {
-        _id: user._id,
-        user_name: user.user_name,
-        email: user.email,
+        _id: updatedUser._id,
+        user_name: updatedUser.user_name,
+        email: updatedUser.email,
       },
     });
   } catch (error) {
@@ -107,16 +110,24 @@ const userPutCurrent = async (
 
 const userDeleteCurrent = async (
   req: Request,
-  res: Response<{message: string}>,
+  res: Response<MessageResponse>,
   next: NextFunction
 ) => {
-  const user = req.user as UserOutput;
   try {
-    const deletedUser = await userModel.findByIdAndDelete(user._id);
-    if (!deletedUser) {
+    const user = (await userModel.findByIdAndDelete(
+      res.locals.user._id
+    )) as unknown as User | null; //Vähän viritys mutta toimii
+    if (!user) {
       throw new CustomError('User not found', 404);
     }
-    res.json({message: 'User deleted'});
+    res.status(200).json({
+      message: 'User deleted',
+      data: {
+        _id: user._id,
+        user_name: user.user_name,
+        email: user.email,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -124,13 +135,16 @@ const userDeleteCurrent = async (
 
 // - checkToken - check if current user token is valid: return data from res.locals.user as UserOutput. No need for database query
 
-const checkToken = (
+const checkToken = async (
   req: Request,
   res: Response<UserOutput>,
-  _next: NextFunction
+  next: NextFunction
 ) => {
-  const user = res.locals.user as UserOutput;
-  res.json(user);
+  try {
+    res.json(res.locals.user);
+  } catch (error) {
+    next(error);
+  }
 };
 
 export {
