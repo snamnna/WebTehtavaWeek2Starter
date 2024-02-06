@@ -2,6 +2,7 @@ import {UserOutput} from './DBTypes';
 
 type MessageResponse = {
   message: string;
+  data?: any;
 };
 
 type ErrorResponse = MessageResponse & {

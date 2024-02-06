@@ -17,6 +17,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/apidoc": "^0.50.0",
+    "@types/bcrypt": "^5.0.2",
     "@types/bcryptjs": "^2.4.2",
     "@types/cors": "^2.8.13",
     "@types/exif": "^0.6.3",
