@@ -63,32 +63,42 @@ const catGetByUser = async (
 
 // - catPost - create new cat
 const catPost = async (
-  req: Request<{token: string; pic: string}, {}, Omit<Cat, '_id'>>,
-  res: Response<MessageResponse & {data: Cat}>,
+  req: Request<{}, {}, Cat>,
+  res: Response<MessageResponse>,
   next: NextFunction
 ) => {
-  req.body.filename = req.file?.path || '';
+  const user = res.locals.user as LoginUser;
+  const cat: Omit<Cat, '_id'> = {
+    cat_name: req.body.cat_name,
+    weight: req.body.weight,
+    filename: req.file?.filename as string,
+    birthdate: req.body.birthdate,
+    location: res.locals.coords,
+    owner: {
+      _id: user._id!,
+      user_name: user.user_name!,
+      email: user.email!,
+      role: 'user',
+      password: '',
+    },
+  };
+
   try {
-    if (!res.locals.user || !('_id' in res.locals.user)) {
-      throw new CustomError('Invalid user data', 400);
-    }
-
-    req.body.location = {
-      ...req.body.location,
-      type: 'Point',
-    };
-
-    const cat = await CatModel.create({
-      ...req.body,
-      owner: res.locals.user._id,
+    const result = await CatModel.create(cat);
+    res.json({
+      message: 'Cat added',
+      data: {
+        _id: result._id,
+        cat_name: result.cat_name,
+        weight: result.weight,
+        filename: result.filename,
+        birthdate: result.birthdate,
+        location: result.location,
+        owner: result.owner,
+      },
     });
-    const response: MessageResponse & {data: Cat} = {
-      message: 'OK',
-      data: cat,
-    };
-    res.status(200).json(response);
-  } catch (error) {
-    next(error);
+  } catch (e) {
+    next(e);
   }
 };
 
@@ -129,7 +139,6 @@ const catPutAdmin = async (
   next: NextFunction
 ) => {
   try {
-    // Check if the user is an admin
     if (!res.locals.user || res.locals.user.role !== 'admin') {
       throw new CustomError(
         'Permission denied. Only admin can update the cat.',
@@ -210,6 +219,7 @@ const catDeleteAdmin = async (
     next(error);
   }
 };
+
 // - catGetByBoundingBox - get all cats by bounding box coordinates (getJSON)
 const catGetByBoundingBox = async (
   req: Request,
@@ -217,18 +227,24 @@ const catGetByBoundingBox = async (
   next: NextFunction
 ) => {
   try {
-    const {minLat, maxLat, minLon, maxLon} = req.query;
-    const cats = await CatModel.find({
-      location: {
-        $geoWithin: {
-          $box: [
-            [Number(minLon), Number(minLat)],
-            [Number(maxLon), Number(maxLat)],
-          ],
-        },
-      },
+    const getCoordinate = (coordinateString: string, index: number): number => {
+      return parseFloat(coordinateString.split(',')[index]);
+    };
+    const topRightMax = getCoordinate(req.query.topRight as string, 0);
+    const topRightMin = getCoordinate(req.query.topRight as string, 1);
+    const bottomLeftMax = getCoordinate(req.query.bottomLeft as string, 0);
+    const bottomLeftMin = getCoordinate(req.query.bottomLeft as string, 1);
+    const cats = await CatModel.find({});
+    const _cats: Cat[] = cats.filter((cat: Cat) => {
+      const [lat, lon] = cat.location.coordinates;
+      return (
+        lat <= topRightMax &&
+        lat >= topRightMin &&
+        lon <= bottomLeftMax &&
+        lon >= bottomLeftMin
+      );
     });
-    res.json(cats);
+    res.json(_cats);
   } catch (error) {
     next(error);
   }
