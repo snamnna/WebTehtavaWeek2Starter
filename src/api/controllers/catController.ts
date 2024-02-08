@@ -67,11 +67,8 @@ const catPost = async (
   res: Response<MessageResponse & {data: Cat}>,
   next: NextFunction
 ) => {
-  console.log('Uploaded File:', req.file);
-  console.log('Uploaded File Path:', req.file?.path);
   req.body.filename = req.file?.path || '';
   try {
-    console.log('res.locals.user', res.locals.user);
     if (!res.locals.user || !('_id' in res.locals.user)) {
       throw new CustomError('Invalid user data', 400);
     }
@@ -85,13 +82,10 @@ const catPost = async (
       ...req.body,
       owner: res.locals.user._id,
     });
-    console.log('cat', cat);
     const response: MessageResponse & {data: Cat} = {
       message: 'OK',
       data: cat,
     };
-    console.log('Response Body:', response);
-
     res.status(200).json(response);
   } catch (error) {
     next(error);
@@ -142,7 +136,6 @@ const catPutAdmin = async (
         403
       );
     }
-
     req.body.location = {
       ...req.body.location,
       type: 'Point',
@@ -150,11 +143,9 @@ const catPutAdmin = async (
     const cat = await CatModel.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
     });
-
     if (!cat) {
       throw new CustomError('Cat not found', 404);
     }
-
     const response: MessageResponse & {data: Cat} = {
       message: 'OK',
       data: cat,
@@ -179,16 +170,13 @@ const catDelete = async (
       );
     }
     const cat = await CatModel.findByIdAndDelete(req.params.id);
-
     if (!cat) {
       throw new CustomError('Cat not found', 404);
     }
-
     const response: MessageResponse & {data: Cat} = {
       message: 'Cat deleted',
       data: cat as unknown as Cat,
     };
-    console.log('delete response', response);
     res.status(200).json(response);
   } catch (error) {
     next(error);
@@ -217,7 +205,6 @@ const catDeleteAdmin = async (
       message: 'Cat deleted',
       data: cat as unknown as Cat,
     };
-    console.log('delete response', response);
     res.status(200).json(response);
   } catch (error) {
     next(error);
