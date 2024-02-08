@@ -42,13 +42,7 @@ router
     catPost
   );
 
-router
-  .route('/area')
-  .get(
-    query('topRight').notEmpty(),
-    query('bottomLeft').notEmpty(),
-    catGetByBoundingBox
-  );
+router.route('/area').get(catGetByBoundingBox);
 
 router.route('/user').get(authenticate, catGetByUser);
 

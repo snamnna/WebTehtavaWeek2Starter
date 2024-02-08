@@ -1,186 +1,60 @@
 import {NextFunction, Request, Response} from 'express';
+import {Cat, LoginUser} from '../../types/DBTypes';
 import CatModel from '../models/catModel';
-import {Cat, User} from '../../types/DBTypes';
-import {Document} from 'mongoose';
-import {Point} from 'geojson';
-import {Types} from 'mongoose';
 import CustomError from '../../classes/CustomError';
-
+import {MessageResponse} from '../../types/MessageTypes';
 // TODO: create following functions:
-// - catGetByUser - get all cats by current user id
-const catGetByUser = async (
-  req: Request<{id: string}>,
+
+// - catListGet - get all cats
+const catListGet = async (
+  _req: Request,
   res: Response<Cat[]>,
   next: NextFunction
 ) => {
-  const user = req.user as User;
   try {
-    const cats = await CatModel.find({owner: user._id});
-    if (!cats) {
-      throw new CustomError('No cats found', 404);
-    }
-    res.json(cats);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// - catGetByBoundingBox - get all cats by bounding box coordinates (getJSON)
-
-const catGetByBoundingBox = async (
-  req: Request<{}, {}, {}, {bbox: [number, number, number, number]}>,
-  res: Response<Cat[]>,
-  next: NextFunction
-) => {
-  const bbox = req.query.bbox;
-  try {
-    const cats = await CatModel.find({
-      location: {
-        $geoWithin: {
-          $box: [
-            [bbox[0], bbox[1]],
-            [bbox[2], bbox[3]],
-          ],
-        },
-      },
+    const cats = await CatModel.find().select('-__v').populate({
+      path: 'owner',
+      select: '-__v -password -role',
     });
-    if (!cats) {
-      throw new CustomError('No cats found', 404);
-    }
     res.json(cats);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// - catPutAdmin - only admin can change cat owner
-
-const catPutAdmin = async (
-  req: Request<{id: string}, {}, Cat, {}>,
-  res: Response<Cat>,
-  next: NextFunction
-) => {
-  const id = req.params.id;
-  const cat = req.body;
-  const user = req.user as User;
-  if (user.role !== 'admin') {
-    throw new CustomError('Unauthorized', 401);
-  }
-  try {
-    const updatedCat = await CatModel.findByIdAndUpdate(id, cat, {new: true});
-    if (!updatedCat) {
-      throw new CustomError('Cat not found', 404);
-    }
-    res.json(updatedCat);
-  } catch (error) {
-    next(error);
-  }
-};
-
-// - catDeleteAdmin - only admin can delete cat
-
-const catDeleteAdmin = async (
-  req: Request<{id: string}>,
-  res: Response<{message: string}>,
-  next: NextFunction
-) => {
-  const id = req.params.id;
-  const user = req.user as User;
-  if (user.role !== 'admin') {
-    throw new CustomError('Unauthorized', 401);
-  }
-  try {
-    const deletedCat = await CatModel.findByIdAndDelete(id);
-    if (!deletedCat) {
-      throw new CustomError('Cat not found', 404);
-    }
-    res.json({message: 'Cat deleted'});
-  } catch (error) {
-    next(error);
-  }
-};
-
-// - catDelete - only owner can delete cat
-
-const catDelete = async (
-  req: Request<{id: string}>,
-  res: Response<{message: string}>,
-  next: NextFunction
-) => {
-  const id = req.params.id;
-  const user = req.user as User;
-  try {
-    const deletedCat = await CatModel.findOneAndDelete({
-      _id: id,
-      owner: user._id,
-    });
-    if (!deletedCat) {
-      throw new CustomError('Cat not found', 404);
-    }
-    res.json({message: 'Cat deleted'});
-  } catch (error) {
-    next(error);
-  }
-};
-
-// - catPut - only owner can update cat
-const catPut = async (
-  req: Request<{id: string}, {}, Cat, {}>,
-  res: Response<Cat>,
-  next: NextFunction
-) => {
-  const id = req.params.id;
-  const cat = req.body;
-  const user = req.user as User;
-  try {
-    const updatedCat = await CatModel.findOneAndUpdate(
-      {_id: id, owner: user._id},
-      cat,
-      {new: true}
-    );
-    if (!updatedCat) {
-      throw new CustomError('Cat not found', 404);
-    }
-    res.json(updatedCat);
   } catch (error) {
     next(error);
   }
 };
 
 // - catGet - get cat by id
-
 const catGet = async (
   req: Request<{id: string}>,
   res: Response<Cat>,
   next: NextFunction
 ) => {
-  const id = req.params.id;
   try {
-    const cat = await CatModel.findById(id).populate(
-      'owner',
-      'user_name email'
-    );
-    if (!cat) {
+    const cats = await CatModel.findById(req.params.id)
+      .select('-__v')
+      .populate({
+        path: 'owner',
+        select: '-__v -password -role',
+      });
+    if (!cats) {
       throw new CustomError('Cat not found', 404);
     }
-    res.json(cat);
+    res.json(cats);
   } catch (error) {
     next(error);
   }
 };
 
-// - catListGet - get all cats
-
-const catListGet = async (
+// - catGetByUser - get all cats by current user id
+const catGetByUser = async (
   req: Request,
   res: Response<Cat[]>,
   next: NextFunction
 ) => {
   try {
-    const cats = await CatModel.find().populate('owner', 'user_name email');
-    if (!cats) {
-      throw new CustomError('No cats found', 404);
+    if (!res.locals.user || !('_id' in res.locals.user)) {
+      throw new CustomError('Invalid user data', 400);
     }
+    const cats = await CatModel.find({owner: res.locals.user._id});
     res.json(cats);
   } catch (error) {
     next(error);
@@ -188,34 +62,198 @@ const catListGet = async (
 };
 
 // - catPost - create new cat
-
 const catPost = async (
-  req: Request<{}, {}, Cat, {}>,
-  res: Response<Cat>,
+  req: Request<{token: string; pic: string}, {}, Omit<Cat, '_id'>>,
+  res: Response<MessageResponse & {data: Cat}>,
   next: NextFunction
 ) => {
-  const cat = req.body;
-  const user = req.user as User;
+  console.log('Uploaded File:', req.file);
+  console.log('Uploaded File Path:', req.file?.path);
+  req.body.filename = req.file?.path || '';
   try {
-    const newCat = new CatModel({
-      ...cat,
-      owner: user._id,
+    console.log('res.locals.user', res.locals.user);
+    if (!res.locals.user || !('_id' in res.locals.user)) {
+      throw new CustomError('Invalid user data', 400);
+    }
+
+    req.body.location = {
+      ...req.body.location,
+      type: 'Point',
+    };
+
+    const cat = await CatModel.create({
+      ...req.body,
+      owner: res.locals.user._id,
     });
-    const savedCat = await newCat.save();
-    res.json(savedCat);
+    console.log('cat', cat);
+    const response: MessageResponse & {data: Cat} = {
+      message: 'OK',
+      data: cat,
+    };
+    console.log('Response Body:', response);
+
+    res.status(200).json(response);
   } catch (error) {
     next(error);
   }
 };
 
+// - catPut - only owner can update cat
+const catPut = async (
+  req: Request<{id: string}, {}, Omit<Cat, '_id'>>,
+  res: Response<MessageResponse>,
+  next: NextFunction
+) => {
+  try {
+    req.body.location = {
+      ...req.body.location,
+      type: 'Point',
+    };
+    const cat = await CatModel.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+    if (!res.locals.user || !('_id' in res.locals.user)) {
+      throw new CustomError('Invalid user data', 400);
+    }
+    if (!cat) {
+      throw new CustomError('Cat not found', 404);
+    }
+    const response: MessageResponse & {data: Cat} = {
+      message: 'OK',
+      data: cat,
+    };
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// - catPutAdmin - only admin can change cat owner
+const catPutAdmin = async (
+  req: Request<{id: string}, {}, Omit<Cat, '_id'>>,
+  res: Response<MessageResponse>,
+  next: NextFunction
+) => {
+  try {
+    // Check if the user is an admin
+    if (!res.locals.user || res.locals.user.role !== 'admin') {
+      throw new CustomError(
+        'Permission denied. Only admin can update the cat.',
+        403
+      );
+    }
+
+    req.body.location = {
+      ...req.body.location,
+      type: 'Point',
+    };
+    const cat = await CatModel.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+
+    if (!cat) {
+      throw new CustomError('Cat not found', 404);
+    }
+
+    const response: MessageResponse & {data: Cat} = {
+      message: 'OK',
+      data: cat,
+    };
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// - catDelete - only owner can delete cat
+const catDelete = async (
+  req: Request<{id: string}>,
+  res: Response<MessageResponse>,
+  next: NextFunction
+) => {
+  try {
+    if (!res.locals.user || !('_id' in res.locals.user)) {
+      throw new CustomError(
+        'Permission denied. You can only delete your own cat.',
+        403
+      );
+    }
+    const cat = await CatModel.findByIdAndDelete(req.params.id);
+
+    if (!cat) {
+      throw new CustomError('Cat not found', 404);
+    }
+
+    const response: MessageResponse & {data: Cat} = {
+      message: 'Cat deleted',
+      data: cat as unknown as Cat,
+    };
+    console.log('delete response', response);
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// - catDeleteAdmin - only admin can delete cat
+const catDeleteAdmin = async (
+  req: Request<{id: string}>,
+  res: Response<MessageResponse>,
+  next: NextFunction
+) => {
+  try {
+    // Check if the user is an admin
+    if (!res.locals.user || res.locals.user.role !== 'admin') {
+      throw new CustomError(
+        'Permission denied. Only admin can delete the cat.',
+        403
+      );
+    }
+    const cat = await CatModel.findByIdAndDelete(req.params.id);
+    if (!cat) {
+      throw new CustomError('Cat not found', 404);
+    }
+    const response: MessageResponse & {data: Cat} = {
+      message: 'Cat deleted',
+      data: cat as unknown as Cat,
+    };
+    console.log('delete response', response);
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+// - catGetByBoundingBox - get all cats by bounding box coordinates (getJSON)
+const catGetByBoundingBox = async (
+  req: Request,
+  res: Response<Cat[]>,
+  next: NextFunction
+) => {
+  try {
+    const {minLat, maxLat, minLon, maxLon} = req.query;
+    const cats = await CatModel.find({
+      location: {
+        $geoWithin: {
+          $box: [
+            [Number(minLon), Number(minLat)],
+            [Number(maxLon), Number(maxLat)],
+          ],
+        },
+      },
+    });
+    res.json(cats);
+  } catch (error) {
+    next(error);
+  }
+};
 export {
-  catGetByUser,
-  catGetByBoundingBox,
-  catPutAdmin,
-  catDeleteAdmin,
   catDelete,
-  catPut,
+  catDeleteAdmin,
   catGet,
+  catGetByBoundingBox,
+  catGetByUser,
   catListGet,
   catPost,
+  catPut,
+  catPutAdmin,
 };
